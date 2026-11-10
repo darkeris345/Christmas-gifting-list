@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Gift lists</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%8E%81%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Figtree:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <section id="join" hidden>
+      <h1>Christmas gift lists</h1>
+      <p class="lede">Write your own wish list and see theirs. Claim a gift and it’s marked for them, but you never see what’s been claimed from yours.</p>
+
+      <div id="sessions-box" hidden>
+        <h2 class="section-title">Your sessions</h2>
+        <ul id="sessions" class="rows"></ul>
+        <p class="hint">“Forget” only removes a session from this device. Use People inside a session to delete it for everyone.</p>
+      </div>
+
+      <h2 class="section-title">Start or join a session</h2>
+      <form id="join-form" novalidate>
+        <div class="field">
+          <label for="room">Room code</label>
+          <div class="inline">
+            <input id="room" name="room" type="text" maxlength="40" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+            <button type="button" id="gen" class="btn btn-quiet">Generate code</button>
+          </div>
+          <p id="room-hint" class="hint"></p>
+        </div>
+        <div class="field">
+          <label for="label">Session name (optional, only you see it)</label>
+          <input id="label" name="label" type="text" maxlength="40" autocomplete="off" placeholder="e.g. Christmas at home">
+        </div>
+
+        <div id="who-box" hidden>
+          <div id="names-group" class="field" hidden>
+            <span id="names-label" class="label">Who are you? Tap your name to join</span>
+            <div id="names" class="chips" role="group" aria-labelledby="names-label"></div>
+          </div>
+          <div class="field">
+            <label for="name" id="name-label">Your name</label>
+            <div class="inline">
+              <input id="name" name="name" type="text" maxlength="30" autocomplete="off" required>
+              <button type="submit" id="join-btn" class="btn btn-primary">Start session</button>
+            </div>
+          </div>
+        </div>
+        <p id="join-error" class="msg is-error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="app" hidden>
+      <div class="bar">
+        <div class="bar-title">
+          <strong id="session-label"></strong>
+          <span id="who"></span>
+        </div>
+        <span class="bar-actions">
+          <button type="button" id="people-toggle" class="btn btn-quiet btn-small" aria-expanded="false" aria-controls="people">People</button>
+          <button type="button" id="invite" class="btn btn-quiet btn-small">Copy invite link</button>
+          <button type="button" id="leave" class="btn btn-quiet btn-small">Switch session</button>
+        </span>
+      </div>
+
+      <section id="people" class="people" hidden>
+        <h2 class="section-title">People</h2>
+        <ul id="people-list" class="rows"></ul>
+        <form id="person-form" class="inline" novalidate>
+          <input id="p-name" type="text" maxlength="30" autocomplete="off" aria-label="Name of person to add" placeholder="Name of person to add">
+          <button type="submit" class="btn btn-quiet">Add person</button>
+        </form>
+        <p id="person-error" class="msg is-error" role="alert"></p>
+        <p class="hint">Only people on this list can open the session. Removing someone deletes their list and any claims they made.</p>
+        <button type="button" id="delete-room" class="btn btn-danger btn-small">Delete session</button>
+      </section>
+
+      <p id="waiting" class="notice" hidden>Only you are in this session. Send the invite link: they can pick their name or add it when they open it.</p>
+
+      <div id="tabs" class="tabs" role="tablist" aria-label="Wish lists"></div>
+
+      <div id="tag" class="tag">
+        <h2 id="tag-title"></h2>
+        <p id="tag-sub"></p>
+      </div>
+
+      <form id="add-form" class="add" novalidate hidden>
+        <div class="field">
+          <label for="g-text">Gift</label>
+          <input id="g-text" type="text" maxlength="120" autocomplete="off" required>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="g-link">Link (optional)</label>
+            <input id="g-link" type="text" inputmode="url" maxlength="500" autocomplete="off" autocapitalize="none" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="g-note">Note (optional)</label>
+            <input id="g-note" type="text" maxlength="200" autocomplete="off" placeholder="Size, colour, model">
+          </div>
+        </div>
+        <button type="submit" id="add-btn" class="btn btn-primary">Add gift</button>
+        <p id="add-error" class="msg is-error" role="alert"></p>
+      </form>
+
+      <ul id="items" class="gifts"></ul>
+      <p id="empty" class="empty" hidden></p>
+    </section>
+
+    <p id="status" class="msg" role="status" aria-live="polite"></p>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>
