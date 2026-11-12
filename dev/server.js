@@ -21,6 +21,7 @@ function run([cmd, key, ...args]) {
     case 'HLEN': return hash().size;
     case 'DEL': return store.delete(key) ? 1 : 0;
     case 'EXPIRE': return 1;
+    case 'PING': return 'PONG';
     default: throw new Error(`fake redis: unsupported ${cmd}`);
   }
 }
@@ -32,6 +33,7 @@ global.fetch = async (_url, init) => {
 };
 
 const handler = require('../api/room.js');
+const healthHandler = require('../api/health.js');
 
 // Apply the same response headers as vercel.json (including the Content-Security-Policy),
 // so anything the policy would block on Vercel also fails here.
@@ -46,6 +48,15 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 
 
 http.createServer((req, res) => {
   for (const { key, value } of SECURITY_HEADERS) res.setHeader(key, value);
+  if (req.url.startsWith('/api/health')) {
+    const shim = {
+      setHeader: (k, v) => res.setHeader(k, v),
+      status(code) { res.statusCode = code; return this; },
+      json(obj) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(obj)); },
+    };
+    healthHandler({ method: req.method }, shim);
+    return;
+  }
   if (req.url.startsWith('/api/room')) {
     let raw = '';
     req.on('data', (c) => { raw += c; });

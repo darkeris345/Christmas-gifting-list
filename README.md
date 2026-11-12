@@ -81,16 +81,39 @@ screen within about 5 seconds.
    framework preset to **Other**, leave the build command and output directory
    empty, and deploy. The `public` folder is served automatically and
    `api/room.js` becomes the API.
-3. In the project, open **Storage** (or the **Marketplace**), add **Upstash for
-   Redis** (the free plan is plenty) and connect it to the project. This adds the
-   environment variables `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
-   If your integration uses different names, `UPSTASH_REDIS_REST_URL` and
-   `UPSTASH_REDIS_REST_TOKEN` also work.
-4. Redeploy once so the function picks up the variables.
-5. Open the site and start a session.
+3. In the project, open **Storage** (or the **Marketplace**), choose **Upstash**
+   and create a **Redis** database (the free plan is plenty). Connect it to this
+   project with **all environments ticked** (Production, Preview, Development).
+   This adds connection settings to the project's environment variables. The app
+   finds them whatever prefix you chose, as long as they are Upstash's REST URL
+   and token (names ending in `REST_API_URL` and `REST_API_TOKEN`, or
+   `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`). A plain `REDIS_URL`
+   on its own is not enough.
+4. **Redeploy** (Deployments, the ⋯ menu on the latest one, Redeploy). Settings added to a
+   project only reach deployments made after they were added, so this step matters.
+5. Open `https://your-site/api/health`. It should say `{"ok":true,"database":"connected"}`.
+   If not, it says what is wrong (see Troubleshooting below). Then open the site and
+   start a session.
 
 Command-line alternative: `npm i -g vercel`, run `vercel` in this folder, add the
 Redis integration in the dashboard, then run `vercel --prod`.
+
+## Troubleshooting
+
+Open `https://your-site/api/health` first. It never shows keys or stored data.
+
+| What it says | What to do |
+| --- | --- |
+| `connected` | The database is fine. If something else fails, check the Logs tab in Vercel. |
+| `not-configured`, "No Redis connection found" | No Upstash REST settings reached this deployment. Connect Upstash for Redis under Storage with all environments ticked, then **redeploy**. |
+| `not-configured`, "plain Redis URL" | Only a `REDIS_URL` is present. Create an **Upstash** Redis database instead, which provides the REST URL and token this app needs. |
+| `rejected` | The token is wrong or was rotated. Reconnect the database to the project (or update the token under Settings, Environment Variables), then redeploy. |
+| `unreachable` | The database can't be reached. Check it still exists in the Upstash dashboard and isn't paused or deleted. |
+
+The same problems show up as a plain sentence when someone tries to start a
+session (for example "The server isn't connected to its database yet"), instead
+of a vague error. The exact cause is also written to the function logs in Vercel
+(project, Logs), without any keys.
 
 ## Try it locally (no account needed)
 

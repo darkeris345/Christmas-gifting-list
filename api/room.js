@@ -19,7 +19,7 @@
 // owner so nobody spoils a surprise by accident.
 
 const crypto = require('node:crypto');
-const { pipeline, toObject } = require('../lib/redis');
+const { pipeline, toObject, RedisError } = require('../lib/redis');
 
 const MAX_MEMBERS = 6; // built for two; raise if more people join in
 const MAX_ITEMS_TOTAL = 300;
@@ -99,6 +99,14 @@ function requireItemId(value) {
 }
 
 const byName = (a, b) => a.localeCompare(b);
+
+// Database trouble gets a plain explanation for the person setting the site up.
+// Nothing sensitive is in these messages.
+const DATABASE_MESSAGES = {
+  'not-configured': 'The server isn’t connected to its database yet. Whoever set up this site needs to connect Redis (README, step 3) and redeploy.',
+  rejected: 'The server’s database refused the connection. Whoever set up this site should check the Redis token.',
+  unreachable: 'The server can’t reach its database right now. Try again in a minute.',
+};
 
 async function loadMembership(keys, meKey) {
   const display = (await pipeline([['HGET', keys.members, meKey]]))[0];
@@ -340,6 +348,10 @@ module.exports = async function handler(req, res) {
     }
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    if (err instanceof RedisError && DATABASE_MESSAGES[err.kind]) {
+      console.error(`room api: database problem (${err.kind}): ${err.message}`);
+      return res.status(503).json({ error: DATABASE_MESSAGES[err.kind] });
+    }
     // Log the cause server-side only; never return internals to the client.
     console.error('room api error:', err && err.message);
     return res.status(500).json({ error: 'Something went wrong on the server. Try again.' });
