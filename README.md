@@ -9,25 +9,14 @@ screen within about 5 seconds.
 
 - **Start a session:** enter your name and press **Start session**. That is the
   whole registration: no code to make or type (one is created for you), no
-  password. You land on your own list, ready to fill in.
-- **Load your whole list:** on an empty list the **Add many gifts at once** box is
-  already open. Paste your list, one gift per line, and press **Add gifts**:
-
-  ```
-  Wool socks | size 42
-  Cast iron skillet
-  Head torch https://shop.example/torch
-  1. Numbers and - bullets are fine
-  ```
-
-  A link can sit anywhere in the line; anything after a `|` is the note. You can
-  also **upload a .txt or .csv file** (a spreadsheet saved as CSV works: a column
-  headed Gift or Name, and any column holding a web address becomes the link,
-  other columns become the note). An uploaded file is placed in the box first, so
-  you can check and edit it before anything is saved. Up to 100 gifts at a time.
-  Lines that can't be added (for example, over 120 characters) are left in the
-  box with the reason, so you can fix them and try again. The one-gift-at-a-time
-  form is still below it.
+  password. You land on your own list with the **Gift** box ready. Add gifts one
+  at a time: the gift, plus an optional link and note.
+- **Edit or remove a gift:** each of your gifts has **Edit** and **Remove**. Edit
+  loads the gift into the form at the top (name, link, note); change it and press
+  **Save changes**, or **Cancel**. What you type is kept while the list refreshes.
+  If someone has already claimed the gift, the claim stays, and they see
+  "Changed since you claimed it" with a **Got it** button, so nobody buys the
+  wrong thing. You never see who has claimed what.
 - **Room code:** every session shows its code (like `xmas-abcde-fghij`) under the
   session name, with a **Copy** button, and saved sessions on the start screen show
   theirs with **Copy code**. Tap the code to select all of it. Anyone with the code
@@ -53,6 +42,9 @@ screen within about 5 seconds.
   to move to the next or previous person, or use the arrow keys, Home and End.
 - **Switch who you are:** if two people share a device, open **People** (or tap
   **Not you?**) and press **Switch to** next to a name. No code needed.
+- **Fix your name:** in **People**, under **Your name**, type the corrected name
+  and press **Save name**. Your list and your claims move with you. If you are
+  signed in on another device, it will ask you to tap your name again.
 - **People panel:** add someone's name ahead of time, or **Remove** a person.
   Removing deletes their list, turns any gifts they had claimed back into
   unclaimed, and sends them to the start screen. You can also rename the session
@@ -148,11 +140,11 @@ need no network or account.
   "owner can't see claims" rule stops accidental spoilers, not someone determined
   to peek. To shut someone out for good, delete the session and start a new one
   with a new code.
-- **Typos create people.** Typing "Alx" instead of "Alex" adds a second person.
-  Use **Remove** in the People panel to clean it up.
+- **Typos create people.** Typing "Alx" instead of "Alex" when joining adds a
+  person called Alx. If you notice straight away, use **Your name** in the People
+  panel to fix it; otherwise **Remove** the stray person.
 - **Data** is stored in Redis and expires 60 days after the last change. Change
   `TTL_SECONDS` in `api/room.js` to alter this.
-- **Limits**: 300 gifts per session, 6 people per session, 120 characters per gift,
-  100 gifts per upload, 200 KB per uploaded file.
+- **Limits**: 300 gifts per session, 6 people per session, 120 characters per gift.
 - **Not included**: rate limiting. If you want it, enable Vercel's firewall rate
   limiting for `/api/room`.

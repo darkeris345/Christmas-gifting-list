@@ -100,6 +100,13 @@
         <p id="person-error" class="msg is-error" role="alert"></p>
         <p class="hint">Removing someone deletes their list and any claims they made. They can rejoin with the room code.</p>
 
+        <h3 class="subtitle">Your name</h3>
+        <form id="myname-form" class="inline" novalidate>
+          <input id="myname-input" type="text" maxlength="30" autocomplete="off" aria-label="Your name">
+          <button type="submit" class="btn btn-quiet">Save name</button>
+        </form>
+        <p class="hint">Fixes a typo. Your list and your claims stay with you. If you are signed in on another device, it will ask you to tap your name again.</p>
+
         <h3 class="subtitle">This session</h3>
         <form id="label-form" class="inline" novalidate>
           <input id="label-input" type="text" maxlength="40" autocomplete="off" aria-label="Session name (only you see it)">
@@ -137,22 +144,8 @@
           <p id="tag-sub"></p>
         </div>
 
-        <details id="bulk" class="bulk" hidden>
-          <summary>Add many gifts at once</summary>
-          <div class="bulk-body">
-            <label for="bulk-text">Paste your list</label>
-            <textarea id="bulk-text" rows="8" maxlength="20000" spellcheck="false" placeholder="Wool socks | size 42&#10;Cast iron skillet&#10;Head torch https://shop.example/torch"></textarea>
-            <p class="hint">One gift per line. Put a link anywhere in the line, and add a note after a | sign. Numbers and bullets are fine.</p>
-            <label for="bulk-file">Or upload a .txt or .csv file</label>
-            <input id="bulk-file" type="file" accept=".txt,.csv,.md,text/plain,text/csv">
-            <p class="hint">An uploaded file is added to the box above, so you can check it before anything is saved.</p>
-            <button type="button" id="bulk-add" class="btn btn-primary" disabled>Add gifts</button>
-            <p id="bulk-count" class="hint" aria-live="polite"></p>
-            <p id="bulk-error" class="msg is-error" role="alert"></p>
-          </div>
-        </details>
-
         <form id="add-form" class="add" novalidate hidden>
+          <h3 id="form-title" class="subtitle">Add a gift</h3>
           <div class="field">
             <label for="g-text">Gift</label>
             <input id="g-text" type="text" maxlength="120" autocomplete="off" required>
@@ -168,6 +161,7 @@
             </div>
           </div>
           <button type="submit" id="add-btn" class="btn btn-primary">Add gift</button>
+          <button type="button" id="cancel-edit" class="btn btn-quiet" hidden>Cancel</button>
           <p id="add-error" class="msg is-error" role="alert"></p>
         </form>
 
@@ -179,7 +173,6 @@
     <p id="status" class="msg" role="status" aria-live="polite"></p>
   </main>
   <script src="/festive.js" defer></script>
-  <script src="/parse.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>

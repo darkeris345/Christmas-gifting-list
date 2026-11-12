@@ -211,52 +211,104 @@ async function test(name, fn) {
     assert.equal((await jo('delete-room')).statusCode, 403);
   });
 
-  await test('add-many adds valid gifts in order and reports the rest by position', async () => {
-    const room = 'xmas-bulkroom1';
-    const me = as('Bea', room);
-    assert.equal((await me('join')).statusCode, 200);
-    const res = await me('add-many', { items: [
-      { text: 'Wool socks', note: 'size 42' },
-      { text: '', note: 'no name' },
-      { text: 'Skillet', link: 'example.com/skillet' },
-      { text: 'Bad link', link: 'javascript:alert(1)' },
-      { text: 'x'.repeat(121) },
-      'not an object',
-      { text: 'Head torch' },
-    ] });
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  await test('the owner can edit a gift; others cannot; bad input changes nothing', async () => {
+    const room = 'xmas-editroom1';
+    const s = as('Sam', room);
+    const a = as('Alex', room);
+    await s('join'); await a('join');
+    const id = (await s('add', { text: 'Socks', note: 'size 42' })).body.id;
+
+    const ok = await s('edit', { id, text: '  Wool   socks ', link: 'example.com/socks', note: 'size 43' });
+    assert.equal(ok.statusCode, 200);
+    assert.equal(ok.body.changed, true);
+    const seen = (await a('state')).body.items.find((i) => i.id === id);
+    assert.deepEqual([seen.text, seen.link, seen.note], ['Wool socks', 'https://example.com/socks', 'size 43']);
+
+    assert.equal((await a('edit', { id, text: 'Mine now' })).statusCode, 403);            // not yours
+    assert.equal((await as('Zed', room)('edit', { id, text: 'x' })).statusCode, 403);     // not in the session
+    assert.equal((await s('edit', { id, text: '' })).statusCode, 400);
+    assert.equal((await s('edit', { id, text: 'x'.repeat(121) })).statusCode, 400);
+    assert.equal((await s('edit', { id, text: 'ok', link: 'javascript:alert(1)' })).statusCode, 400);
+    assert.equal((await s('edit', { id: 'not-an-id', text: 'x' })).statusCode, 400);
+    assert.equal((await s('edit', { id: '00000000-0000-0000-0000-000000000000', text: 'x' })).statusCode, 404);
+    const after = (await s('state')).body.items.find((i) => i.id === id);
+    assert.deepEqual([after.text, after.link, after.note], ['Wool socks', 'https://example.com/socks', 'size 43']);
+
+    await s('edit', { id, text: 'Wool socks', link: '', note: '' });                        // links and notes can be cleared
+    const cleared = (await s('state')).body.items.find((i) => i.id === id);
+    assert.deepEqual([cleared.link, cleared.note], ['', '']);
+    assert.equal((await s('edit', { id, text: 'Wool socks' })).body.changed, false);        // nothing to save
+  });
+
+  await test('a claimer hears that a claimed gift changed; the owner never learns who claimed', async () => {
+    const room = 'xmas-editroom2';
+    const s = as('Sam', room);
+    const a = as('Alex', room);
+    await s('join'); await a('join');
+    const id = (await s('add', { text: 'Socks', note: 'size 42' })).body.id;
+    const view = async (who) => (await who('state')).body.items.find((i) => i.id === id);
+
+    await a('claim', { id });
+    assert.equal((await view(a)).changedSinceClaim, false);
+    await sleep(5);
+    await s('edit', { id, text: 'Socks', note: 'size 44' });                                // changed after the claim
+    const forAlex = await view(a);
+    assert.equal(forAlex.claimedByMe, true);                                                // the claim survives the edit
+    assert.equal(forAlex.changedSinceClaim, true);
+    const forSam = await view(s);
+    assert.equal(forSam.claimedBy, null);
+    assert.equal(forSam.changedSinceClaim, false);
+    assert.ok(!JSON.stringify(forSam).includes('claimedAt') && !JSON.stringify(forSam).includes('editedAt'));
+
+    await sleep(5);
+    await a('claim', { id });                                                               // "got it"
+    assert.equal((await view(a)).changedSinceClaim, false);
+    await sleep(5);
+    await s('edit', { id, text: 'Socks', note: 'size 44' });                                // no real change
+    assert.equal((await view(a)).changedSinceClaim, false);
+    await s('edit', { id, text: 'Socks', note: 'size 45' });
+    assert.equal((await view(a)).changedSinceClaim, true);
+    await a('unclaim', { id });
+    assert.equal((await view(a)).changedSinceClaim, false);
+  });
+
+  await test('you can rename yourself: your list and claims move; duplicates and bad names are refused', async () => {
+    const room = 'xmas-editroom3';
+    const s = as('Sam', room);
+    const a = as('Alex', room);
+    await s('join'); await a('join');
+    const samGift = (await s('add', { text: 'Skillet' })).body.id;
+    const alexGift = (await a('add', { text: 'Mug' })).body.id;
+    await a('claim', { id: samGift });
+    await s('claim', { id: alexGift });
+
+    const res = await a('rename-member', { name: ' Alexander ' });
     assert.equal(res.statusCode, 200);
-    assert.equal(res.body.added, 3);
-    assert.deepEqual(res.body.skipped.map((s) => s.index), [1, 3, 4, 5]);
-    assert.match(res.body.skipped[1].error, /http/);
-    const state = (await me('state')).body;
-    assert.deepEqual(state.items.map((i) => i.text), ['Wool socks', 'Skillet', 'Head torch']); // order kept
-    assert.equal(state.items[1].link, 'https://example.com/skillet');
-    assert.equal(state.items[0].note, 'size 42');
-    assert.ok(state.items.every((i) => i.mine && i.claimedBy === null));
-  });
+    assert.equal(res.body.me, 'Alexander');
+    const alexander = as('Alexander', room);
+    const forAlexander = (await alexander('state')).body;
+    assert.deepEqual(forAlexander.members, ['Alexander', 'Sam']);
+    assert.equal(forAlexander.items.find((i) => i.id === samGift).claimedByMe, true);       // his claim moved with him
+    const mug = forAlexander.items.find((i) => i.id === alexGift);
+    assert.equal(mug.mine, true);                                                           // and so did his gift
+    const forSam = (await s('state')).body;
+    assert.equal(forSam.items.find((i) => i.id === alexGift).owner, 'Alexander');
+    assert.equal(forSam.items.find((i) => i.id === alexGift).claimedByMe, true);            // Sam's claim on it still stands
+    assert.equal(forSam.items.find((i) => i.id === samGift).claimedBy, null);               // still hidden from the owner
+    assert.equal((await a('state')).statusCode, 403);                                       // the old name is gone
 
-  await test('add-many refuses empty, oversized, malformed and non-member requests', async () => {
-    const room = 'xmas-bulkroom1';
-    const me = as('Bea', room);
-    assert.equal((await me('add-many', { items: [] })).statusCode, 400);
-    assert.equal((await me('add-many', {})).statusCode, 400);
-    assert.equal((await me('add-many', { items: 'nope' })).statusCode, 400);
-    const tooMany = Array.from({ length: 101 }, (_, i) => ({ text: `Gift ${i}` }));
-    assert.equal((await me('add-many', { items: tooMany })).statusCode, 400);
-    assert.equal((await as('Stranger', room)('add-many', { items: [{ text: 'x' }] })).statusCode, 403);
-  });
+    assert.equal((await alexander('rename-member', { name: 'sam' })).statusCode, 409);
+    assert.equal((await alexander('rename-member', { name: '' })).statusCode, 400);
+    assert.equal((await alexander('rename-member', { name: 'bad\u0007' })).statusCode, 400);
+    assert.equal((await as('Zed', room)('rename-member', { name: 'Zed2' })).statusCode, 403);
 
-  await test('add-many stops at the session gift limit and says which gifts did not fit', async () => {
-    const room = 'xmas-limitroom';
-    const me = as('Cy', room);
-    await me('join');
-    const hundred = (tag) => Array.from({ length: 100 }, (_, i) => ({ text: `${tag} ${i}` }));
-    for (const tag of ['a', 'b', 'c']) assert.equal((await me('add-many', { items: hundred(tag) })).body.added, 100);
-    const over = await me('add-many', { items: [{ text: 'one more' }, { text: 'and another' }] });
-    assert.equal(over.body.added, 0);
-    assert.equal(over.body.skipped.length, 2);
-    assert.match(over.body.skipped[0].error, /gift limit/);
-    assert.equal((await me('add', { text: 'single add too' })).statusCode, 409);
+    const caseOnly = await alexander('rename-member', { name: 'ALEXANDER' });               // same person, new capitals
+    assert.equal(caseOnly.body.me, 'ALEXANDER');
+    assert.deepEqual((await s('state')).body.members, ['ALEXANDER', 'Sam']);
+    assert.equal((await alexander('state')).statusCode, 200);                               // same key: still signed in
+    await alexander('rename-member', { name: 'Alexander' });
   });
 
   await test('unknown action and malformed body are rejected', async () => {

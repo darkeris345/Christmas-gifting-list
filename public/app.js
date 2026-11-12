@@ -10,13 +10,11 @@
   const STORE_LAST = 'gifts.last';         // room code to reopen on the next visit
   const MAX_SESSIONS = 20;
   const SWIPE_MIN = 70; // px
-  const MAX_BULK = 100;  // gifts per upload; matches the server limit
-  const MAX_FILE_BYTES = 200 * 1024;
 
   const $ = (id) => document.getElementById(id);
   const state = {
     room: '', me: '', label: '', data: null, tab: null, timer: null,
-    refreshingRoom: '', namesTicket: 0, previous: null, revealTab: false, focusTab: false, revealSession: false, bulkChecked: false,
+    refreshingRoom: '', namesTicket: 0, previous: null, revealTab: false, focusTab: false, revealSession: false, editingId: '',
   };
 
   const store = {
@@ -238,11 +236,6 @@
     $('tag-sub').textContent = '';
     $('empty').hidden = true;
     $('add-form').hidden = true;
-    $('bulk').hidden = true;
-    $('bulk-text').value = '';
-    $('bulk-error').textContent = '';
-    $('bulk-count').textContent = '';
-    $('bulk-add').disabled = true;
     $('waiting').hidden = true;
   }
 
@@ -258,13 +251,14 @@
     state.tab = state.me;
     state.data = null;
     state.previous = null;
-    state.bulkChecked = false;
+    endEdit();
     clearSessionView();
     $('session-label').textContent = state.label;
     $('who').textContent = `as ${state.me}`;
     $('room-code').textContent = room;
     $('bar-code').textContent = room;
     $('label-input').value = state.label;
+    $('myname-input').value = state.me;
     closePeople();
     closeInvite();
     $('invite-for').value = '';
@@ -351,6 +345,7 @@
     const room = state.room;
     if (!room || state.refreshingRoom === room) return;
     state.refreshingRoom = room;
+    const meAtStart = state.me;
     try {
       const data = await post('state');
       if (room !== state.room) return; // user switched session mid-request
@@ -361,6 +356,7 @@
       if (!$('status').classList.contains('is-error')) setStatus('');
     } catch (err) {
       if (room !== state.room) return;
+      if (err.status === 403 && state.me !== meAtStart) return; // the name changed while this was in flight
       if (err.status === 403) {
         goHome('You’ve been removed from this session, or it has expired. To rejoin, use the room code and tap or add your name.', room);
       } else {
@@ -404,13 +400,10 @@
     renderTabs(ordered);
     renderTag(state.tab, items);
     renderItems(state.tab, items);
-    const onOwnList = state.tab === state.me;
-    $('add-form').hidden = !onOwnList;
-    $('bulk').hidden = !onOwnList;
-    if (!state.bulkChecked) {
-      // First look at an empty list: open the paste box so loading your list is the obvious next step.
-      state.bulkChecked = true;
-      $('bulk').open = items.filter((i) => i.mine).length === 0;
+    $('add-form').hidden = state.tab !== state.me;
+    if (state.editingId && !items.some((i) => i.id === state.editingId && i.mine)) {
+      endEdit();
+      $('add-error').textContent = 'That gift was removed, so editing stopped.';
     }
   }
 
@@ -474,6 +467,7 @@
 
   function selectTab(name, focus) {
     if (state.tab === name || !state.data) return;
+    if (state.tab === state.me) endEdit(); // moving off your own list drops a half-finished edit
     state.tab = name;
     state.revealTab = true;
     state.focusTab = Boolean(focus);
@@ -597,13 +591,28 @@
     actions.className = 'gift-actions';
 
     if (mine) {
-      actions.append(actionButton('Remove', 'btn-quiet', `Remove ${item.text}`, () => act('remove', item.id)));
+      li.classList.toggle('is-editing', item.id === state.editingId);
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'btn btn-small btn-quiet';
+      edit.textContent = 'Edit';
+      edit.setAttribute('aria-label', `Edit ${item.text}`);
+      edit.addEventListener('click', () => startEdit(item));
+      actions.append(edit, actionButton('Remove', 'btn-quiet', `Remove ${item.text}`, () => act('remove', item.id)));
     } else if (item.claimedByMe) {
       li.classList.add('is-mine-claimed');
       const label = document.createElement('span');
       label.className = 'claim-state';
       label.textContent = '✓ You’re getting this';
-      actions.append(label, actionButton('Undo', 'btn-quiet', `Undo claim on ${item.text}`, () => act('unclaim', item.id)));
+      actions.append(label);
+      if (item.changedSinceClaim) {
+        const changed = document.createElement('p');
+        changed.className = 'changed-note';
+        changed.textContent = 'Changed since you claimed it. Check the details.';
+        main.append(changed);
+        actions.append(actionButton('Got it', 'btn-quiet', `Acknowledge the change to ${item.text}`, () => act('claim', item.id)));
+      }
+      actions.append(actionButton('Undo', 'btn-quiet', `Undo claim on ${item.text}`, () => act('unclaim', item.id)));
     } else if (item.claimedBy) {
       const label = document.createElement('span');
       label.className = 'claim-state';
@@ -625,6 +634,43 @@
       setStatus(err.message, true);
     }
     await refresh(); // always resync, e.g. after someone else claimed first
+  }
+
+  /* ---------- editing a gift ---------- */
+
+  // The gift goes into the form at the top, which isn't redrawn while the list refreshes,
+  // so what you type is never lost.
+  function startEdit(item) {
+    state.editingId = item.id;
+    $('g-text').value = item.text;
+    $('g-link').value = item.link || '';
+    $('g-note').value = item.note || '';
+    $('form-title').textContent = 'Edit gift';
+    $('add-btn').textContent = 'Save changes';
+    $('cancel-edit').hidden = false;
+    $('add-error').textContent = '';
+    renderItems(state.tab, state.data.items);
+    $('add-form').scrollIntoView({ block: 'nearest' });
+    $('g-text').focus();
+  }
+
+  function endEdit() {
+    const wasEditing = Boolean(state.editingId);
+    state.editingId = '';
+    $('form-title').textContent = 'Add a gift';
+    $('add-btn').textContent = 'Add gift';
+    $('cancel-edit').hidden = true;
+    if (wasEditing) {
+      $('g-text').value = '';
+      $('g-link').value = '';
+      $('g-note').value = '';
+    }
+  }
+
+  function cancelEdit() {
+    endEdit();
+    $('add-error').textContent = '';
+    if (state.data) renderItems(state.tab, state.data.items);
   }
 
   /* ---------- people panel ---------- */
@@ -693,6 +739,26 @@
       await post('add-member', { name });
       $('p-name').value = '';
       await refresh();
+    } catch (err) {
+      error.textContent = err.message;
+    }
+  }
+
+  async function onMyNameSubmit(event) {
+    event.preventDefault();
+    const error = $('person-error');
+    error.textContent = '';
+    const name = $('myname-input').value.trim();
+    if (!name) { error.textContent = 'Enter your name.'; $('myname-input').focus(); return; }
+    try {
+      const result = await post('rename-member', { name });
+      state.me = result.me;                    // set straight away, so a refresh in flight isn't taken for "removed"
+      upsertSession(state.room, state.me, '');
+      $('who').textContent = `as ${state.me}`;
+      $('myname-input').value = state.me;
+      if (state.tab !== null && state.data && state.tab === state.data.me) state.tab = state.me;
+      await refresh();
+      setStatus(`Your name is now ${state.me}.`);
     } catch (err) {
       error.textContent = err.message;
     }
@@ -806,75 +872,6 @@
     enter(newCode(), me, '').catch((err) => { error.textContent = err.message; });
   }
 
-  /* ---------- add many gifts at once ---------- */
-
-  function updateBulkCount() {
-    const n = GiftParser.parseList($('bulk-text').value).length;
-    $('bulk-add').disabled = n === 0;
-    $('bulk-count').textContent = n === 0
-      ? ''
-      : (n > MAX_BULK
-        ? `${plural(n, 'gift')} found. The first ${MAX_BULK} will be added now; press the button again for the rest.`
-        : `${plural(n, 'gift')} ready to add.`);
-  }
-
-  async function onBulkFile(event) {
-    const input = event.target;
-    const file = input.files && input.files[0];
-    const error = $('bulk-error');
-    error.textContent = '';
-    if (!file) return;
-    try {
-      if (file.size > MAX_FILE_BYTES) throw new Error('That file is too big. The limit is 200 KB.');
-      let text = await file.text();
-      if (text.includes('\u0000')) throw new Error('That doesn’t look like a text or CSV file.');
-      if (/\.csv$/i.test(file.name) || file.type === 'text/csv') {
-        text = GiftParser.toLines(GiftParser.parseCsv(text)).join('\n');
-      }
-      const box = $('bulk-text');
-      const joined = (box.value.trim() ? `${box.value.replace(/\s+$/, '')}\n` : '') + text;
-      box.value = joined.slice(0, box.maxLength);
-      if (joined.length > box.maxLength) error.textContent = 'The file was long, so only the first part was loaded.';
-      updateBulkCount();
-    } catch (err) {
-      error.textContent = err.message;
-    } finally {
-      input.value = ''; // lets the same file be chosen again
-    }
-  }
-
-  async function onBulkAdd() {
-    const error = $('bulk-error');
-    const btn = $('bulk-add');
-    error.textContent = '';
-    const all = GiftParser.parseList($('bulk-text').value);
-    const batch = all.slice(0, MAX_BULK);
-    const rest = all.slice(MAX_BULK);
-    if (batch.length === 0) return;
-    btn.disabled = true;
-    try {
-      const result = await post('add-many', { items: batch.map(({ text, link, note }) => ({ text, link, note })) });
-      // Keep whatever wasn't added in the box, so it can be fixed and tried again.
-      const left = result.skipped.map((s) => batch[s.index].source).concat(rest.map((r) => r.source));
-      $('bulk-text').value = left.join('\n');
-      await refresh(); // refreshing clears the status line, so do it before showing our own message
-      if (result.skipped.length > 0) {
-        const why = result.skipped.slice(0, 3)
-          .map((s) => `“${batch[s.index].text.slice(0, 30)}” (${s.error})`).join('; ');
-        error.textContent = `${plural(result.added, 'gift')} added. ${result.skipped.length} not added and left in the box: ${why}${result.skipped.length > 3 ? '…' : ''}`;
-      } else if (rest.length > 0) {
-        setStatus(`${plural(result.added, 'gift')} added. Press Add gifts again for the remaining ${rest.length}.`);
-      } else {
-        setStatus(`${plural(result.added, 'gift')} added to your list.`);
-        $('bulk').open = false;
-      }
-    } catch (err) {
-      error.textContent = err.message;
-    } finally {
-      updateBulkCount();
-    }
-  }
-
   /* ---------- in-session actions ---------- */
 
   async function onAddSubmit(event) {
@@ -886,12 +883,19 @@
     if (!text) { error.textContent = 'Enter the gift.'; $('g-text').focus(); return; }
     btn.disabled = true;
     try {
-      await post('add', { text, link: $('g-link').value, note: $('g-note').value });
-      $('g-text').value = '';
-      $('g-link').value = '';
-      $('g-note').value = '';
-      $('g-text').focus();
-      await refresh();
+      if (state.editingId) {
+        const result = await post('edit', { id: state.editingId, text, link: $('g-link').value, note: $('g-note').value });
+        endEdit();
+        await refresh(); // refreshing clears the status line, so show ours after it
+        setStatus(result.changed ? 'Gift updated.' : 'No changes to save.');
+      } else {
+        await post('add', { text, link: $('g-link').value, note: $('g-note').value });
+        $('g-text').value = '';
+        $('g-link').value = '';
+        $('g-note').value = '';
+        $('g-text').focus();
+        await refresh();
+      }
     } catch (err) {
       error.textContent = err.message;
     } finally {
@@ -1000,11 +1004,10 @@
     });
 
     $('add-form').addEventListener('submit', onAddSubmit);
-    $('bulk-text').addEventListener('input', () => { $('bulk-error').textContent = ''; updateBulkCount(); });
-    $('bulk-file').addEventListener('change', onBulkFile);
-    $('bulk-add').addEventListener('click', onBulkAdd);
     $('person-form').addEventListener('submit', onPersonSubmit);
     $('label-form').addEventListener('submit', onLabelSubmit);
+    $('myname-form').addEventListener('submit', onMyNameSubmit);
+    $('cancel-edit').addEventListener('click', cancelEdit);
     $('invite').addEventListener('click', () => setInviteOpen($('invite-panel').hidden));
     $('invite-for').addEventListener('input', updateInvite);
     $('invite-share').addEventListener('click', shareNative);

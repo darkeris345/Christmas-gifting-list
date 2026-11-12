@@ -7,11 +7,12 @@
 //   add-member   add a person to the session (e.g. before they arrive)
 //   remove-member remove a person (deletes their list and any claims they made)
 //   delete-room  delete the whole session
-//   add, add-many, remove, claim, unclaim   gift actions
+//   rename-member change your own name (your list and claims move with you)
+//   add, edit, remove, claim, unclaim   gift actions
 //
 // Data model (Redis hashes, one pair per room):
 //   xmas:<room>:members   memberKey (lowercase name) -> display name
-//   xmas:<room>:items     itemId -> JSON { id, owner, text, link, note, claimedBy, createdAt }
+//   xmas:<room>:items     itemId -> JSON { id, owner, text, link, note, claimedBy, claimedAt, editedAt, createdAt }
 //
 // Access: the room code is the shared secret. Anyone with it can join by picking
 // an existing name or adding a new one (up to MAX_MEMBERS). Identity is
@@ -23,7 +24,6 @@ const { pipeline, toObject, RedisError } = require('../lib/redis');
 
 const MAX_MEMBERS = 6; // built for two; raise if more people join in
 const MAX_ITEMS_TOTAL = 300;
-const MAX_BATCH = 100; // gifts per add-many call
 const TTL_SECONDS = 60 * 60 * 24 * 60; // data expires 60 days after the last write
 const ROOM_RE = /^[a-z0-9-]{8,40}$/;
 const ID_RE = /^[0-9a-f-]{36}$/;
@@ -196,6 +196,8 @@ module.exports = async function handler(req, res) {
               // The list owner never learns who has claimed what.
               claimedBy: mine || !it.claimedBy ? null : (members[it.claimedBy] || null),
               claimedByMe: !mine && it.claimedBy === meKey,
+              // Only the person who claimed it hears that it changed afterwards.
+              changedSinceClaim: !mine && it.claimedBy === meKey && Boolean(it.editedAt) && it.editedAt > (it.claimedAt || 0),
             };
           });
 
@@ -280,37 +282,47 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({ ok: true, id: item.id });
       }
 
-      // Adds a whole list at once. Valid gifts are added; the rest are reported back
-      // by position so the person can fix them and try again.
-      case 'add-many': {
+      case 'edit': {
         await loadMembership(keys, meKey);
-        if (!Array.isArray(body.items) || body.items.length === 0) throw new HttpError(400, 'Nothing to add.');
-        if (body.items.length > MAX_BATCH) {
-          throw new HttpError(400, `Add up to ${MAX_BATCH} gifts at a time.`);
+        const item = await loadItem(keys, requireItemId(body.id));
+        if (item.owner !== meKey) throw new HttpError(403, 'You can only edit gifts on your own list.');
+        const gift = cleanGift({ text: body.text, note: body.note, link: body.link });
+        const changed = gift.text !== item.text || gift.link !== (item.link || '') || gift.note !== (item.note || '');
+        if (changed) {
+          Object.assign(item, gift);
+          item.editedAt = Date.now();
+          await saveItem(keys, item); // any claim stays; the claimer is told it changed
         }
-        const total = (await pipeline([['HLEN', keys.items]]))[0];
-        const slotsLeft = Math.max(0, MAX_ITEMS_TOTAL - total);
+        return res.status(200).json({ ok: true, changed });
+      }
+
+      case 'rename-member': {
+        await loadMembership(keys, meKey);
+        const newName = cleanString(body.name, { label: 'Name', min: 1, max: 30 });
+        const newKey = newName.toLowerCase();
+        const [membersRaw, itemsRaw] = await pipeline([
+          ['HGETALL', keys.members],
+          ['HGETALL', keys.items],
+        ]);
+        const members = toObject(membersRaw);
+        if (newKey !== meKey && members[newKey]) throw new HttpError(409, `${members[newKey]} is already in this session.`);
 
         const commands = [];
-        const skipped = [];
-        const base = Date.now();
-        body.items.forEach((raw, index) => {
-          try {
-            const gift = cleanGift(raw);
-            if (commands.length >= slotsLeft) throw new HttpError(409, 'This session has reached its gift limit.');
-            const item = { id: crypto.randomUUID(), owner: meKey, ...gift, claimedBy: null, createdAt: base + index };
-            commands.push(['HSET', keys.items, item.id, JSON.stringify(item)]);
-          } catch (err) {
-            if (!(err instanceof HttpError)) throw err;
-            skipped.push({ index, error: err.message });
+        if (newKey !== meKey) {
+          // Your gifts and the gifts you claimed move to the new name.
+          for (const raw of Object.values(toObject(itemsRaw))) {
+            const it = parseItem(raw);
+            if (!it) continue;
+            let moved = false;
+            if (it.owner === meKey) { it.owner = newKey; moved = true; }
+            if (it.claimedBy === meKey) { it.claimedBy = newKey; moved = true; }
+            if (moved) commands.push(['HSET', keys.items, it.id, JSON.stringify(it)]);
           }
-        });
-        const added = commands.length;
-        if (added > 0) {
-          commands.push(['EXPIRE', keys.items, TTL_SECONDS], ['EXPIRE', keys.members, TTL_SECONDS]);
-          await pipeline(commands);
+          commands.push(['HDEL', keys.members, meKey]);
         }
-        return res.status(200).json({ ok: true, added, skipped });
+        commands.push(['HSET', keys.members, newKey, newName], ['EXPIRE', keys.members, TTL_SECONDS]);
+        await pipeline(commands);
+        return res.status(200).json({ ok: true, me: newName });
       }
 
       case 'remove': {
@@ -330,6 +342,7 @@ module.exports = async function handler(req, res) {
           throw new HttpError(409, `${other} is already getting this.`);
         }
         item.claimedBy = meKey;
+        item.claimedAt = Date.now(); // claiming again is how someone says "got it" after a change
         await saveItem(keys, item);
         return res.status(200).json({ ok: true, me: display });
       }
@@ -339,6 +352,7 @@ module.exports = async function handler(req, res) {
         const item = await loadItem(keys, requireItemId(body.id));
         if (item.claimedBy !== meKey) throw new HttpError(409, 'You haven’t claimed this gift.');
         item.claimedBy = null;
+        item.claimedAt = null;
         await saveItem(keys, item);
         return res.status(200).json({ ok: true });
       }
