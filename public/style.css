@@ -78,6 +78,7 @@ h1 {
 .field-row { display: flex; gap: 1rem; }
 .inline { display: flex; gap: 0.6rem; }
 .inline input { flex: 1 1 auto; min-width: 0; }
+.inline .btn { flex: none; white-space: nowrap; }
 
 label, .label { display: block; font-weight: 600; margin-bottom: 0.3rem; }
 
@@ -132,6 +133,7 @@ input::placeholder { color: var(--muted); opacity: 1; }
   font-size: 0.95rem;
 }
 
+.bar-brand { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
 .bar-title { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
 .bar-title strong { color: var(--ink); font-size: 1.05rem; }
 .bar-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
@@ -143,10 +145,18 @@ input::placeholder { color: var(--muted); opacity: 1; }
   border-left: 4px solid var(--twine);
 }
 
-.tabs { display: flex; gap: 1.5rem; border-bottom: 1px solid var(--line); }
+.tabs {
+  display: flex;
+  gap: 1.5rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
 
 .tab {
-  margin-bottom: -1px;
+  flex: none;
+  white-space: nowrap;
   padding: 0.7rem 0;
   font: inherit;
   font-weight: 600;
@@ -278,3 +288,146 @@ input::placeholder { color: var(--muted); opacity: 1; }
   .row { grid-template-columns: 1fr; }
   .row-actions { justify-content: flex-start; }
 }
+
+/* ---------- decorations: snow and tree ---------- */
+
+#snow { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+main { position: relative; z-index: 1; }
+
+.hero { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.hero h1 { min-width: 0; }
+
+.tree { flex: none; width: clamp(4.5rem, 22vw, 7.5rem); }
+.tree-small { width: 3.2rem; }
+.tree svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.tree-trunk { fill: #6e5039; }
+.tree-tier { stroke-width: 3; stroke-linejoin: round; }
+.tree-tier-1 { fill: #2f8f68; stroke: #2f8f68; }
+.tree-tier-2 { fill: #267a5a; stroke: #267a5a; }
+.tree-tier-3 { fill: #1f6650; stroke: #1f6650; }
+.tree-star { fill: var(--twine); }
+
+.light-halo { opacity: 0.35; }
+.l0 .light-halo, .l0 .light-core { fill: #ff5470; }
+.l1 .light-halo, .l1 .light-core { fill: #ffd166; }
+.l2 .light-halo, .l2 .light-core { fill: #7fd1ff; }
+.l3 .light-halo, .l3 .light-core { fill: #fff3c4; }
+
+@keyframes twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+@keyframes star-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Lights stay steadily lit unless the person is happy with motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .tree-light { animation: twinkle 1.6s ease-in-out infinite; }
+  .tree-star { animation: star-glow 3s ease-in-out infinite; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .tree-trunk { fill: #8a6a4e; }
+  .tree-tier-1 { fill: #3aa579; stroke: #3aa579; }
+  .tree-tier-2 { fill: #2f8f68; stroke: #2f8f68; }
+  .tree-tier-3 { fill: #277a59; stroke: #277a59; }
+}
+
+
+/* ---------- session tabs, back button, small helpers ---------- */
+
+.session-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.35rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.stab {
+  flex: none;
+  max-width: 14rem;
+  min-height: 2.5rem;
+  padding: 0.35rem 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  background: transparent;
+  border: 1.5px solid var(--edge);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.stab[aria-current="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); cursor: default; }
+.stab-add { border-style: dashed; }
+
+#back-btn { margin: 0 0 0.5rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.link-btn {
+  padding: 0.25rem 0;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.subtitle { font-family: var(--font-display); font-size: 1.15rem; margin: 1.5rem 0 0.6rem; }
+
+/* Tab strips scroll, so a normal outline would be clipped at their edges: draw the focus ring inside. */
+.tab:focus-visible, .stab:focus-visible { outline-offset: -3px; }
+
+/* ---------- add many gifts at once ---------- */
+
+.bulk { margin: 0 0 1.25rem; }
+.bulk summary { display: flex; align-items: center; min-height: 2.75rem; font-weight: 600; cursor: pointer; }
+.bulk-body { padding-top: 0.5rem; }
+.bulk-body .btn { margin-top: 0.5rem; }
+
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 8rem;
+  padding: 0.6rem 0.8rem;
+  font: inherit;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--field);
+  border: 1.5px solid var(--edge);
+  border-radius: 6px;
+  resize: vertical;
+}
+
+textarea::placeholder { color: var(--muted); opacity: 1; }
+
+input[type="file"] { display: block; max-width: 100%; margin-bottom: 0.2rem; font: inherit; color: var(--ink); }
+
+.bulk summary { list-style: none; }
+.bulk summary::-webkit-details-marker { display: none; }
+.bulk summary::before { content: "+"; display: inline-block; width: 1.4rem; font-weight: 800; }
+.bulk[open] > summary::before { content: "–"; }
+.bulk-body label ~ label { margin-top: 1.1rem; }
+
+/* ---------- room code ---------- */
+
+.code { letter-spacing: 0.02em; user-select: all; overflow-wrap: anywhere; } /* one tap or double-click selects it all */
+.code-line { color: var(--muted); font-size: 0.95rem; }
+.code-line .code { color: var(--ink); font-weight: 600; }
+.row-code { display: block; user-select: all; overflow-wrap: anywhere; }
+
+/* ---------- invite panel ---------- */
+
+a.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.invite-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.9rem 0; }
+.chip-primary { background: var(--berry); color: var(--berry-ink); border-color: var(--berry); }

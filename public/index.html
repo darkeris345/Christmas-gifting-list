@@ -13,10 +13,16 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <canvas id="snow" aria-hidden="true" hidden></canvas>
   <main>
     <section id="join" hidden>
-      <h1>Christmas gift lists</h1>
+      <div class="hero">
+        <h1>Christmas gift lists</h1>
+        <div class="tree" aria-hidden="true"></div>
+      </div>
       <p class="lede">Write your own wish list and see theirs. Claim a gift and it’s marked for them, but you never see what’s been claimed from yours.</p>
+
+      <button type="button" id="back-btn" class="btn btn-quiet" hidden></button>
 
       <div id="sessions-box" hidden>
         <h2 class="section-title">Your sessions</h2>
@@ -24,97 +30,156 @@
         <p class="hint">“Forget” only removes a session from this device. Use People inside a session to delete it for everyone.</p>
       </div>
 
-      <h2 class="section-title">Start or join a session</h2>
-      <form id="join-form" novalidate>
-        <div class="field">
-          <label for="room">Room code</label>
-          <div class="inline">
-            <input id="room" name="room" type="text" maxlength="40" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" required>
-            <button type="button" id="gen" class="btn btn-quiet">Generate code</button>
-          </div>
-          <p id="room-hint" class="hint"></p>
-        </div>
-        <div class="field">
-          <label for="label">Session name (optional, only you see it)</label>
-          <input id="label" name="label" type="text" maxlength="40" autocomplete="off" placeholder="e.g. Christmas at home">
-        </div>
-
-        <div id="who-box" hidden>
-          <div id="names-group" class="field" hidden>
-            <span id="names-label" class="label">Who are you? Tap your name to join</span>
-            <div id="names" class="chips" role="group" aria-labelledby="names-label"></div>
-          </div>
+      <div id="start-box">
+        <h2 class="section-title">Start a new session</h2>
+        <form id="start-form" novalidate>
           <div class="field">
-            <label for="name" id="name-label">Your name</label>
-            <div class="inline">
-              <input id="name" name="name" type="text" maxlength="30" autocomplete="off" required>
-              <button type="submit" id="join-btn" class="btn btn-primary">Start session</button>
+            <label for="s-name">Your name</label>
+            <input id="s-name" name="s-name" type="text" maxlength="30" autocomplete="given-name" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Start session</button>
+          <p id="start-error" class="msg is-error" role="alert"></p>
+        </form>
+      </div>
+
+      <div id="join-box">
+        <h2 class="section-title">Join a session</h2>
+        <p id="invited" class="notice" hidden>You’ve been invited. Tap your name below, or add yourself.</p>
+        <form id="join-form" novalidate>
+          <div class="field">
+            <label for="room">Invite link or room code</label>
+            <input id="room" name="room" type="text" maxlength="300" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+            <p id="room-hint" class="hint"></p>
+          </div>
+
+          <div id="who-box" hidden>
+            <div id="names-group" class="field">
+              <span id="names-label" class="label">Who are you? Tap your name to join</span>
+              <div id="names" class="chips" role="group" aria-labelledby="names-label"></div>
+            </div>
+            <div class="field">
+              <label for="name" id="name-label">Not on the list? Add yourself</label>
+              <div class="inline">
+                <input id="name" name="name" type="text" maxlength="30" autocomplete="off" required>
+                <button type="submit" id="join-btn" class="btn btn-primary">Add me and join</button>
+              </div>
             </div>
           </div>
-        </div>
-        <p id="join-error" class="msg is-error" role="alert"></p>
-      </form>
+          <p id="join-error" class="msg is-error" role="alert"></p>
+        </form>
+      </div>
+      <p id="start-wrap" hidden><button type="button" id="start-instead" class="btn btn-quiet btn-small">Start a new session instead</button></p>
     </section>
 
     <section id="app" hidden>
+      <nav id="session-tabs" class="session-tabs" aria-label="Sessions"></nav>
+
       <div class="bar">
-        <div class="bar-title">
-          <strong id="session-label"></strong>
-          <span id="who"></span>
+        <div class="bar-brand">
+          <div class="tree tree-small" aria-hidden="true"></div>
+          <div class="bar-title">
+            <strong id="session-label"></strong>
+            <span><span id="who"></span> <button type="button" id="not-you" class="link-btn">Not you?</button></span>
+            <span class="code-line">Room code <span id="bar-code" class="code"></span> <button type="button" id="copy-code" class="link-btn">Copy</button></span>
+          </div>
         </div>
         <span class="bar-actions">
           <button type="button" id="people-toggle" class="btn btn-quiet btn-small" aria-expanded="false" aria-controls="people">People</button>
-          <button type="button" id="invite" class="btn btn-quiet btn-small">Copy invite link</button>
-          <button type="button" id="leave" class="btn btn-quiet btn-small">Switch session</button>
+          <button type="button" id="invite" class="btn btn-quiet btn-small" aria-expanded="false" aria-controls="invite-panel">Invite</button>
         </span>
       </div>
 
       <section id="people" class="people" hidden>
         <h2 class="section-title">People</h2>
+        <p class="hint">Tap “Switch to” to use this device as someone else in this session.</p>
         <ul id="people-list" class="rows"></ul>
         <form id="person-form" class="inline" novalidate>
           <input id="p-name" type="text" maxlength="30" autocomplete="off" aria-label="Name of person to add" placeholder="Name of person to add">
           <button type="submit" class="btn btn-quiet">Add person</button>
         </form>
         <p id="person-error" class="msg is-error" role="alert"></p>
-        <p class="hint">Only people on this list can open the session. Removing someone deletes their list and any claims they made.</p>
+        <p class="hint">Removing someone deletes their list and any claims they made. They can rejoin with the room code.</p>
+
+        <h3 class="subtitle">This session</h3>
+        <form id="label-form" class="inline" novalidate>
+          <input id="label-input" type="text" maxlength="40" autocomplete="off" aria-label="Session name (only you see it)">
+          <button type="submit" class="btn btn-quiet">Save name</button>
+        </form>
+        <p class="hint">Room code: <span id="room-code"></span>. Anyone with it can join, so share it only with people you want in.</p>
         <button type="button" id="delete-room" class="btn btn-danger btn-small">Delete session</button>
       </section>
 
-      <p id="waiting" class="notice" hidden>Only you are in this session. Send the invite link: they can pick their name or add it when they open it.</p>
+      <section id="invite-panel" class="people" hidden>
+        <h2 class="section-title">Invite someone</h2>
+        <div class="field">
+          <label for="invite-for">Their name (optional)</label>
+          <input id="invite-for" type="text" maxlength="30" autocomplete="off" list="invite-names" placeholder="e.g. Alex">
+          <datalist id="invite-names"></datalist>
+          <p class="hint">With a name, the link opens straight to “Join as …” for that person.</p>
+        </div>
+        <div class="invite-actions">
+          <button type="button" id="invite-share" class="btn btn-primary btn-small" hidden>Share…</button>
+          <a id="invite-wa" class="btn btn-quiet btn-small" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+          <a id="invite-sms" class="btn btn-quiet btn-small">Text message</a>
+          <a id="invite-mail" class="btn btn-quiet btn-small">Email</a>
+          <button type="button" id="invite-copy" class="btn btn-quiet btn-small">Copy link</button>
+        </div>
+        <p class="hint">They open the link and tap their name. Or they can paste the room code into Join a session on any device.</p>
+      </section>
+
+      <p id="waiting" class="notice" hidden>Only you are in this session. Press Invite to send it to the other person.</p>
 
       <div id="tabs" class="tabs" role="tablist" aria-label="Wish lists"></div>
 
-      <div id="tag" class="tag">
-        <h2 id="tag-title"></h2>
-        <p id="tag-sub"></p>
+      <div id="panel" role="tabpanel">
+        <div id="tag" class="tag">
+          <h2 id="tag-title"></h2>
+          <p id="tag-sub"></p>
+        </div>
+
+        <details id="bulk" class="bulk" hidden>
+          <summary>Add many gifts at once</summary>
+          <div class="bulk-body">
+            <label for="bulk-text">Paste your list</label>
+            <textarea id="bulk-text" rows="8" maxlength="20000" spellcheck="false" placeholder="Wool socks | size 42&#10;Cast iron skillet&#10;Head torch https://shop.example/torch"></textarea>
+            <p class="hint">One gift per line. Put a link anywhere in the line, and add a note after a | sign. Numbers and bullets are fine.</p>
+            <label for="bulk-file">Or upload a .txt or .csv file</label>
+            <input id="bulk-file" type="file" accept=".txt,.csv,.md,text/plain,text/csv">
+            <p class="hint">An uploaded file is added to the box above, so you can check it before anything is saved.</p>
+            <button type="button" id="bulk-add" class="btn btn-primary" disabled>Add gifts</button>
+            <p id="bulk-count" class="hint" aria-live="polite"></p>
+            <p id="bulk-error" class="msg is-error" role="alert"></p>
+          </div>
+        </details>
+
+        <form id="add-form" class="add" novalidate hidden>
+          <div class="field">
+            <label for="g-text">Gift</label>
+            <input id="g-text" type="text" maxlength="120" autocomplete="off" required>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="g-link">Link (optional)</label>
+              <input id="g-link" type="text" inputmode="url" maxlength="500" autocomplete="off" autocapitalize="none" spellcheck="false">
+            </div>
+            <div class="field">
+              <label for="g-note">Note (optional)</label>
+              <input id="g-note" type="text" maxlength="200" autocomplete="off" placeholder="Size, colour, model">
+            </div>
+          </div>
+          <button type="submit" id="add-btn" class="btn btn-primary">Add gift</button>
+          <p id="add-error" class="msg is-error" role="alert"></p>
+        </form>
+
+        <ul id="items" class="gifts"></ul>
+        <p id="empty" class="empty" hidden></p>
       </div>
-
-      <form id="add-form" class="add" novalidate hidden>
-        <div class="field">
-          <label for="g-text">Gift</label>
-          <input id="g-text" type="text" maxlength="120" autocomplete="off" required>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="g-link">Link (optional)</label>
-            <input id="g-link" type="text" inputmode="url" maxlength="500" autocomplete="off" autocapitalize="none" spellcheck="false">
-          </div>
-          <div class="field">
-            <label for="g-note">Note (optional)</label>
-            <input id="g-note" type="text" maxlength="200" autocomplete="off" placeholder="Size, colour, model">
-          </div>
-        </div>
-        <button type="submit" id="add-btn" class="btn btn-primary">Add gift</button>
-        <p id="add-error" class="msg is-error" role="alert"></p>
-      </form>
-
-      <ul id="items" class="gifts"></ul>
-      <p id="empty" class="empty" hidden></p>
     </section>
 
     <p id="status" class="msg" role="status" aria-live="polite"></p>
   </main>
+  <script src="/festive.js" defer></script>
+  <script src="/parse.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>

@@ -7,7 +7,7 @@
 //   add-member   add a person to the session (e.g. before they arrive)
 //   remove-member remove a person (deletes their list and any claims they made)
 //   delete-room  delete the whole session
-//   add, remove, claim, unclaim   gift actions
+//   add, add-many, remove, claim, unclaim   gift actions
 //
 // Data model (Redis hashes, one pair per room):
 //   xmas:<room>:members   memberKey (lowercase name) -> display name
@@ -23,6 +23,7 @@ const { pipeline, toObject } = require('../lib/redis');
 
 const MAX_MEMBERS = 6; // built for two; raise if more people join in
 const MAX_ITEMS_TOTAL = 300;
+const MAX_BATCH = 100; // gifts per add-many call
 const TTL_SECONDS = 60 * 60 * 24 * 60; // data expires 60 days after the last write
 const ROOM_RE = /^[a-z0-9-]{8,40}$/;
 const ID_RE = /^[0-9a-f-]{36}$/;
@@ -72,6 +73,16 @@ function cleanLink(value) {
     throw new HttpError(400, 'Links must start with http:// or https://.');
   }
   return url.href;
+}
+
+// Validates one gift. Throws HttpError with a message that makes sense to show a person.
+function cleanGift(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new HttpError(400, 'That gift isn’t valid.');
+  return {
+    text: cleanString(raw.text, { label: 'Gift', min: 1, max: 120 }),
+    note: cleanString(raw.note, { label: 'Note', max: 200 }),
+    link: cleanLink(raw.link),
+  };
 }
 
 function parseItem(raw) {
@@ -243,9 +254,7 @@ module.exports = async function handler(req, res) {
 
       case 'add': {
         await loadMembership(keys, meKey);
-        const text = cleanString(body.text, { label: 'Gift', min: 1, max: 120 });
-        const note = cleanString(body.note, { label: 'Note', max: 200 });
-        const link = cleanLink(body.link);
+        const { text, note, link } = cleanGift({ text: body.text, note: body.note, link: body.link });
 
         const total = (await pipeline([['HLEN', keys.items]]))[0];
         if (total >= MAX_ITEMS_TOTAL) throw new HttpError(409, 'This session has reached its gift limit.');
@@ -261,6 +270,39 @@ module.exports = async function handler(req, res) {
         };
         await saveItem(keys, item);
         return res.status(200).json({ ok: true, id: item.id });
+      }
+
+      // Adds a whole list at once. Valid gifts are added; the rest are reported back
+      // by position so the person can fix them and try again.
+      case 'add-many': {
+        await loadMembership(keys, meKey);
+        if (!Array.isArray(body.items) || body.items.length === 0) throw new HttpError(400, 'Nothing to add.');
+        if (body.items.length > MAX_BATCH) {
+          throw new HttpError(400, `Add up to ${MAX_BATCH} gifts at a time.`);
+        }
+        const total = (await pipeline([['HLEN', keys.items]]))[0];
+        const slotsLeft = Math.max(0, MAX_ITEMS_TOTAL - total);
+
+        const commands = [];
+        const skipped = [];
+        const base = Date.now();
+        body.items.forEach((raw, index) => {
+          try {
+            const gift = cleanGift(raw);
+            if (commands.length >= slotsLeft) throw new HttpError(409, 'This session has reached its gift limit.');
+            const item = { id: crypto.randomUUID(), owner: meKey, ...gift, claimedBy: null, createdAt: base + index };
+            commands.push(['HSET', keys.items, item.id, JSON.stringify(item)]);
+          } catch (err) {
+            if (!(err instanceof HttpError)) throw err;
+            skipped.push({ index, error: err.message });
+          }
+        });
+        const added = commands.length;
+        if (added > 0) {
+          commands.push(['EXPIRE', keys.items, TTL_SECONDS], ['EXPIRE', keys.members, TTL_SECONDS]);
+          await pipeline(commands);
+        }
+        return res.status(200).json({ ok: true, added, skipped });
       }
 
       case 'remove': {

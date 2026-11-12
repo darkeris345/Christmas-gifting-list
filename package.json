@@ -4,7 +4,7 @@
   "private": true,
   "description": "Shared Christmas wish lists for two people, deployable on Vercel.",
   "scripts": {
-    "test": "node test/api.test.js",
+    "test": "node test/api.test.js && node test/parse.test.js",
     "dev": "node dev/server.js"
   }
 }

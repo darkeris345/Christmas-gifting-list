@@ -32,10 +32,20 @@ global.fetch = async (_url, init) => {
 };
 
 const handler = require('../api/room.js');
+
+// Apply the same response headers as vercel.json (including the Content-Security-Policy),
+// so anything the policy would block on Vercel also fails here.
+const SECURITY_HEADERS = (() => {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
+    return (cfg.headers || []).flatMap((rule) => rule.headers || []);
+  } catch (_) { return []; }
+})();
 const PUBLIC = path.join(__dirname, '..', 'public');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript' };
 
 http.createServer((req, res) => {
+  for (const { key, value } of SECURITY_HEADERS) res.setHeader(key, value);
   if (req.url.startsWith('/api/room')) {
     let raw = '';
     req.on('data', (c) => { raw += c; });

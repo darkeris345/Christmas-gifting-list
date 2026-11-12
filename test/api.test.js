@@ -211,6 +211,54 @@ async function test(name, fn) {
     assert.equal((await jo('delete-room')).statusCode, 403);
   });
 
+  await test('add-many adds valid gifts in order and reports the rest by position', async () => {
+    const room = 'xmas-bulkroom1';
+    const me = as('Bea', room);
+    assert.equal((await me('join')).statusCode, 200);
+    const res = await me('add-many', { items: [
+      { text: 'Wool socks', note: 'size 42' },
+      { text: '', note: 'no name' },
+      { text: 'Skillet', link: 'example.com/skillet' },
+      { text: 'Bad link', link: 'javascript:alert(1)' },
+      { text: 'x'.repeat(121) },
+      'not an object',
+      { text: 'Head torch' },
+    ] });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.added, 3);
+    assert.deepEqual(res.body.skipped.map((s) => s.index), [1, 3, 4, 5]);
+    assert.match(res.body.skipped[1].error, /http/);
+    const state = (await me('state')).body;
+    assert.deepEqual(state.items.map((i) => i.text), ['Wool socks', 'Skillet', 'Head torch']); // order kept
+    assert.equal(state.items[1].link, 'https://example.com/skillet');
+    assert.equal(state.items[0].note, 'size 42');
+    assert.ok(state.items.every((i) => i.mine && i.claimedBy === null));
+  });
+
+  await test('add-many refuses empty, oversized, malformed and non-member requests', async () => {
+    const room = 'xmas-bulkroom1';
+    const me = as('Bea', room);
+    assert.equal((await me('add-many', { items: [] })).statusCode, 400);
+    assert.equal((await me('add-many', {})).statusCode, 400);
+    assert.equal((await me('add-many', { items: 'nope' })).statusCode, 400);
+    const tooMany = Array.from({ length: 101 }, (_, i) => ({ text: `Gift ${i}` }));
+    assert.equal((await me('add-many', { items: tooMany })).statusCode, 400);
+    assert.equal((await as('Stranger', room)('add-many', { items: [{ text: 'x' }] })).statusCode, 403);
+  });
+
+  await test('add-many stops at the session gift limit and says which gifts did not fit', async () => {
+    const room = 'xmas-limitroom';
+    const me = as('Cy', room);
+    await me('join');
+    const hundred = (tag) => Array.from({ length: 100 }, (_, i) => ({ text: `${tag} ${i}` }));
+    for (const tag of ['a', 'b', 'c']) assert.equal((await me('add-many', { items: hundred(tag) })).body.added, 100);
+    const over = await me('add-many', { items: [{ text: 'one more' }, { text: 'and another' }] });
+    assert.equal(over.body.added, 0);
+    assert.equal(over.body.skipped.length, 2);
+    assert.match(over.body.skipped[0].error, /gift limit/);
+    assert.equal((await me('add', { text: 'single add too' })).statusCode, 409);
+  });
+
   await test('unknown action and malformed body are rejected', async () => {
     assert.equal((await sam('explode')).statusCode, 400);
     assert.equal((await call('not json')).statusCode, 400);
